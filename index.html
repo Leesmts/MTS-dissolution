@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>용출률 그래프 · 유사성(f2) 분석</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --blue:#2563eb; --blue-d:#1d4ed8; --bg:#f3f4f6; --card:#fff;
+    --bd:#d1d5db; --fg:#111827; --muted:#6b7280; --ok:#16a34a; --bad:#dc2626; --warn:#d97706;
+  }
+  *{box-sizing:border-box}
+  body{font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+       background:var(--bg); color:var(--fg); margin:0; padding:0;}
+  .wrap{max-width:1180px; margin:0 auto; padding:18px;}
+  .card{background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:18px; margin-bottom:18px;}
+  h2{font-size:17px; margin:0 0 14px;}
+  h3{font-size:14px; margin:0 0 10px; color:var(--muted);}
+  label{font-size:13px;}
+  input[type=text], input[type=number], select{
+    border:1px solid var(--bd); border-radius:6px; padding:5px 7px; font-size:13px; background:#fff;}
+  input[type=number]{width:70px;}
+  table{border-collapse:collapse; width:100%; font-size:13px;}
+  th,td{border:1px solid #e5e7eb; padding:4px 6px; text-align:center;}
+  th{background:#f9fafb; font-weight:600;}
+  .btn{background:var(--blue); color:#fff; border:none; border-radius:7px; padding:8px 14px;
+       font-size:13px; cursor:pointer;}
+  .btn:hover{background:var(--blue-d);}
+  .btn.ghost{background:#fff; color:#374151; border:1px solid var(--bd);}
+  .btn.ghost:hover{background:#f3f4f6;}
+  .btn.sm{padding:4px 9px; font-size:12px;}
+  .row{display:flex; gap:14px; flex-wrap:wrap; align-items:center;}
+  .ctrl{display:flex; align-items:center; gap:6px;}
+  .del{color:var(--bad); cursor:pointer; border:1px solid #fca5a5; background:#fff; border-radius:5px; padding:2px 7px;}
+  .sname{width:150px; text-align:left;}
+  .color-sw{width:34px; height:22px; border:1px solid var(--bd); border-radius:4px; padding:0; cursor:pointer;}
+  .chart-box{position:relative; height:470px; width:100%;}
+  .hint{color:var(--muted); font-size:12px;}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600;}
+  .pill.ok{background:#dcfce7; color:var(--ok);} .pill.bad{background:#fee2e2; color:var(--bad);}
+  .pill.warn{background:#fef3c7; color:var(--warn);}
+  .f2-big{font-size:34px; font-weight:800;}
+  .result-box{border:1px solid var(--bd); border-radius:10px; padding:16px; margin-top:12px; background:#fafafa;}
+  .notice{border-radius:10px; padding:14px 16px; margin-top:12px; font-size:13px; line-height:1.6;}
+  .notice.warn{background:#fffbeb; border:1px solid #fcd34d; color:#92400e;}
+  .notice.ok{background:#f0fdf4; border:1px solid #86efac; color:#166534;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:800px){.grid2{grid-template-columns:1fr;}}
+  /* login */
+  #login{position:fixed; inset:0; background:#111827; display:flex; align-items:center; justify-content:center; z-index:999;}
+  .login-card{background:#fff; border-radius:14px; padding:34px 30px; width:340px; text-align:center;}
+  .login-card h1{font-size:19px; margin:0 0 6px;}
+  .login-card p{color:var(--muted); font-size:13px; margin:0 0 18px;}
+  .login-card input{width:100%; padding:11px; font-size:15px; margin-bottom:12px;}
+  .login-card .btn{width:100%; padding:11px;}
+  .err{color:var(--bad); font-size:13px; height:18px; margin-top:8px;}
+  #app{display:none;}
+  textarea{width:100%; border:1px solid var(--bd); border-radius:6px; font-size:12px; font-family:ui-monospace,monospace; padding:6px;}
+</style>
+</head>
+<body>
+
+<!-- ===================== 로그인 ===================== -->
+<div id="login">
+  <div class="login-card">
+    <h1 id="login-title">용출률 분석 앱</h1>
+    <p>비밀번호를 입력하면 바로 사용할 수 있습니다.</p>
+    <input type="password" id="pw" placeholder="비밀번호" autocomplete="off">
+    <button class="btn" id="login-btn">로그인</button>
+    <div class="err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ===================== 앱 본문 ===================== -->
+<div id="app">
+<div class="wrap">
+
+  <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+    <h2 id="app-title" style="margin:0;">용출률 그래프 · 유사성(f2) 분석</h2>
+    <button class="btn ghost sm" onclick="logout()">로그아웃</button>
+  </div>
+
+  <!-- 엑셀 불러오기 -->
+  <div class="card">
+    <h2>0. 엑셀 불러오기 (KiFDA 비교용출 종합표)</h2>
+    <div class="row">
+      <input type="file" id="xlsx-file" accept=".xlsx,.xls">
+      <select id="sheet-sel" style="display:none;"></select>
+      <button class="btn sm" id="xlsx-apply" style="display:none;" onclick="applySheet()">이 시트 적용</button>
+    </div>
+    <div class="hint" id="xlsx-msg" style="margin-top:8px;">
+      식약처 '기시용출액' 양식 엑셀을 올리면, 맨 아래 요약표(용출시간·mean·CV)와 12 vessel 개별값을 자동으로 읽어
+      아래 그래프 시리즈와 f2 입력칸을 채웁니다. 실패하면 아래 칸에 직접 입력하세요.
+    </div>
+  </div>
+
+  <!-- 1. 채취시간 -->
+  <div class="card">
+    <h2>1. 채취시간 (X축, 분)</h2>
+    <div class="row">
+      <input type="text" id="times-input" value="0, 10, 15, 30" style="width:320px;">
+      <button class="btn sm" onclick="applyTimes()">시간 적용</button>
+      <span class="hint">쉼표로 구분 · 간격은 실제 값 그대로 반영</span>
+    </div>
+  </div>
+
+  <!-- 2. 데이터 입력 -->
+  <div class="card">
+    <h2>2. 데이터 입력 (그래프)</h2>
+    <div style="overflow-x:auto;">
+      <table id="series-table"></table>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn ghost sm" onclick="addSeries()">+ 시리즈 추가</button>
+      <span class="hint">'기준'을 체크하면 상·하한 밴드(기준 ± 밴드 폭)가 그래프에 표시됩니다.</span>
+    </div>
+    <hr style="border:none; border-top:1px solid #eee; margin:14px 0;">
+    <div class="row">
+      <div class="ctrl"><label>선 두께</label><input type="number" id="lineW" value="3" min="1" max="10"></div>
+      <div class="ctrl"><label>마커 크기</label><input type="number" id="markS" value="6" min="0" max="20"></div>
+      <div class="ctrl"><label>레이블 글자</label><input type="number" id="labF" value="14" min="8" max="30"></div>
+      <div class="ctrl"><label>범례 글자</label><input type="number" id="legF" value="14" min="8" max="30"></div>
+      <div class="ctrl"><label>밴드 폭 ±</label><input type="number" id="bandW" value="15" min="0" max="50"></div>
+      <div class="ctrl"><label>Y축 최대</label><input type="number" id="ymax" value="130" min="10" max="300"></div>
+      <div class="ctrl"><label>곡선 완만</label><input type="number" id="tension" value="0.35" min="0" max="1" step="0.05"></div>
+      <div class="ctrl"><input type="checkbox" id="fillBand" checked><label>상·하한 사이 채우기</label></div>
+    </div>
+    <div class="row" style="margin-top:14px;">
+      <button class="btn" onclick="drawChart()">그래프 그리기</button>
+      <button class="btn ghost" onclick="savePNG()">PNG로 저장</button>
+      <button class="btn ghost" onclick="resetAll()">기본값 복원</button>
+    </div>
+  </div>
+
+  <!-- 그래프 -->
+  <div class="card">
+    <h2>그래프</h2>
+    <div class="chart-box"><canvas id="chart"></canvas></div>
+  </div>
+
+  <!-- 3. f2 -->
+  <div class="card">
+    <h2>3. 유사성(f2) 계산</h2>
+    <h3>대조약(R) · 시험약(T)의 시점별 평균 / CV(%) 입력</h3>
+    <div style="overflow-x:auto;">
+      <table id="f2-table"></table>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <div class="ctrl"><label>단위 수 n (vessel)</label><input type="number" id="nUnits" value="12" min="3" max="24"></div>
+      <button class="btn ghost sm" onclick="pickAll()">전체 point</button>
+      <button class="btn ghost sm" onclick="pickExcl0()">0분 제외</button>
+      <button class="btn ghost sm" onclick="autoPickBy85()">85% 규칙 자동선택</button>
+      <button class="btn" onclick="calcF2()">f2 계산</button>
+    </div>
+    <div id="f2-result"></div>
+  </div>
+
+  <!-- 4. 부트스트랩 -->
+  <div class="card" id="boot-card">
+    <h2>4. 부트스트랩 f2 (90% 신뢰구간)</h2>
+    <div class="row">
+      <div class="ctrl"><label>반복 횟수</label><input type="number" id="bootN" value="5000" min="200" max="100000" step="100"></div>
+      <div class="ctrl"><label>방법</label>
+        <select id="bootMethod">
+          <option value="auto">자동(개별값 있으면 비모수)</option>
+          <option value="param">모수(mean±SD에서 생성)</option>
+          <option value="nonparam">비모수(개별 12값 재표본)</option>
+        </select>
+      </div>
+      <button class="btn" onclick="runBootstrap()">부트스트랩 실행</button>
+    </div>
+    <div class="row" style="margin-top:12px; align-items:flex-start;">
+      <div style="flex:1; min-width:260px;">
+        <h3>대조약(R) 개별값 (선택) · 행=vessel, 열=시점(쉼표)</h3>
+        <textarea id="rIndiv" rows="4" placeholder="예)&#10;33.6, 75.6, 99.8&#10;30.8, 72.4, 100.2&#10;..."></textarea>
+      </div>
+      <div style="flex:1; min-width:260px;">
+        <h3>시험약(T) 개별값 (선택)</h3>
+        <textarea id="tIndiv" rows="4" placeholder="예)&#10;44.0, 84.9, 98.5&#10;30.7, 73.1, 100.1&#10;..."></textarea>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:6px;">개별값이 있으면 비모수 재표본(권장), 없으면 mean·CV로부터 정규분포 모수 부트스트랩을 수행합니다. 열 순서는 아래 f2표의 '사용' 체크된 시점 순서와 같아야 합니다.</div>
+    <div id="boot-result"></div>
+  </div>
+
+  <div class="hint" style="text-align:center; margin-bottom:30px;">
+    계산식: f2 = 50·log₁₀{ [1 + (1/n)·Σ(R−T)²]^(−1/2) · 100 } · 판정: f2 ≥ 50 이면 유사 ·
+    부트스트랩 판정: 90% CI 하한 ≥ 50 이면 유사
+  </div>
+
+</div>
+</div>
+
+<script src="config.js"></script>
+<script>
+Chart.register(ChartDataLabels);
+
+/* ============ 로그인 ============ */
+const CFG = window.APP_CONFIG || {};
+document.getElementById('app-title').textContent = CFG.APP_TITLE || '용출률 분석';
+document.getElementById('login-title').textContent = (CFG.APP_TITLE||'용출률 분석').split('·')[0].trim();
+async function sha256(s){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function sessionValid(){
+  try{
+    const t = +localStorage.getItem('auth_t');
+    const h = (CFG.SESSION_HOURS||12)*3600*1000;
+    return t && (Date.now()-t) < h && localStorage.getItem('auth_ok')==='1';
+  }catch(e){return false;}
+}
+function showApp(){ document.getElementById('login').style.display='none'; document.getElementById('app').style.display='block'; init(); }
+async function tryLogin(){
+  const pw = document.getElementById('pw').value;
+  const h = await sha256(pw);
+  if(h === CFG.PASSWORD_HASH){
+    try{ localStorage.setItem('auth_ok','1'); localStorage.setItem('auth_t', Date.now()); }catch(e){}
+    showApp();
+  } else {
+    document.getElementById('login-err').textContent = '비밀번호가 올바르지 않습니다.';
+  }
+}
+function logout(){ try{localStorage.removeItem('auth_ok');}catch(e){} location.reload(); }
+document.getElementById('login-btn').onclick = tryLogin;
+document.getElementById('pw').addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
+if(sessionValid()) showApp();
+
+/* ============ 상태 ============ */
+let times = [0,10,15,30];
+const PALETTE = ['#dc2626','#1e2a78','#059669','#f59e0b','#2563eb','#7c3aed','#0891b2','#be185d'];
+const MARKERS = [['rect','사각형'],['rectRot','마름모'],['triangle','삼각형'],['circle','원'],['star','별'],['false','없음']];
+let series = [];
+function defaultSeries(){
+  return [
+    {name:'40mg_60%',  color:'#dc2626', marker:'rect',   show:true, label:true,  ref:false, vals:[0,41.0,79.0,99.0]},
+    {name:'40mg_70%',  color:'#1e2a78', marker:'rectRot',show:true, label:true,  ref:false, vals:[0,33.6,74.3,100.3]},
+    {name:'대조약(기준)', color:'#059669', marker:'triangle',show:true, label:true, ref:true, vals:[0,25.9,63.1,98.9]},
+  ];
+}
+
+/* ============ 초기화 ============ */
+function init(){
+  series = defaultSeries();
+  applyTimes(true);
+}
+
+/* ============ 시간 ============ */
+function applyTimes(keep){
+  const raw = document.getElementById('times-input').value;
+  const arr = raw.split(',').map(s=>parseFloat(s.trim())).filter(v=>!isNaN(v));
+  if(arr.length<2){ alert('시간을 2개 이상 입력하세요.'); return; }
+  const old = times.slice();
+  times = arr;
+  // 시리즈 값 길이 맞추기
+  series.forEach(s=>{
+    const nv = times.map((t,i)=>{
+      const oi = old.indexOf(t);
+      if(keep && s.vals[i]!==undefined && old.length===times.length) return s.vals[i];
+      return (oi>=0 && s.vals[oi]!==undefined)? s.vals[oi] : 0;
+    });
+    s.vals = nv;
+  });
+  renderSeriesTable();
+  renderF2Table();
+}
+
+/* ============ 시리즈 테이블 ============ */
+function renderSeriesTable(){
+  const t = document.getElementById('series-table');
+  let h = '<tr><th>시리즈명</th><th>색</th><th>마커</th><th>표시</th><th>레이블</th><th>기준</th>';
+  times.forEach(tm=> h+='<th>'+tm+'분</th>');
+  h += '<th></th></tr>';
+  series.forEach((s,i)=>{
+    h += '<tr>';
+    h += '<td><input type="text" class="sname" value="'+s.name+'" oninput="series['+i+'].name=this.value"></td>';
+    h += '<td><input type="color" class="color-sw" value="'+s.color+'" oninput="series['+i+'].color=this.value"></td>';
+    h += '<td><select onchange="series['+i+'].marker=this.value">'+MARKERS.map(m=>'<option value="'+m[0]+'"'+(s.marker===m[0]?' selected':'')+'>'+m[1]+'</option>').join('')+'</select></td>';
+    h += '<td><input type="checkbox" '+(s.show?'checked':'')+' onchange="series['+i+'].show=this.checked"></td>';
+    h += '<td><input type="checkbox" '+(s.label?'checked':'')+' onchange="series['+i+'].label=this.checked"></td>';
+    h += '<td><input type="radio" name="refser" '+(s.ref?'checked':'')+' onchange="setRef('+i+')"></td>';
+    times.forEach((tm,j)=>{
+      h += '<td><input type="number" style="width:62px" value="'+(s.vals[j]??0)+'" oninput="series['+i+'].vals['+j+']=parseFloat(this.value)"></td>';
+    });
+    h += '<td><button class="del" onclick="delSeries('+i+')">×</button></td>';
+    h += '</tr>';
+  });
+  t.innerHTML = h;
+}
+function setRef(i){ series.forEach((s,k)=> s.ref = (k===i)); }
+function addSeries(){
+  const c = PALETTE[series.length % PALETTE.length];
+  series.push({name:'시리즈 '+(series.length+1), color:c, marker:'circle', show:true, label:true, ref:false, vals:times.map(()=>0)});
+  renderSeriesTable();
+}
+function delSeries(i){ series.splice(i,1); renderSeriesTable(); }
+function resetAll(){ document.getElementById('times-input').value='0, 10, 15, 30'; init(); if(chart) chart.destroy(), chart=null; }
+
+/* ============ 그래프 ============ */
+let chart=null;
+function markerToStyle(m){ return (m==='false')? false : m; }
+function drawChart(){
+  const lineW=+document.getElementById('lineW').value;
+  const markS=+document.getElementById('markS').value;
+  const labF=+document.getElementById('labF').value;
+  const legF=+document.getElementById('legF').value;
+  const bandW=+document.getElementById('bandW').value;
+  const ymax=+document.getElementById('ymax').value;
+  const tension=+document.getElementById('tension').value;
+  const fillBand=document.getElementById('fillBand').checked;
+
+  const labels = times.slice();
+  const ds=[];
+
+  // 밴드 (기준 시리즈 ± 폭)
+  const ref = series.find(s=>s.ref);
+  if(ref && bandW>0){
+    const lower = ref.vals.map(v=>v-bandW);
+    const upper = ref.vals.map(v=>v+bandW);
+    ds.push({label:'하한', data:lower, borderColor:'#c4b5fd', borderDash:[6,4], borderWidth:1.5,
+      pointRadius:0, fill:false, tension, datalabels:{display:false}, order:99});
+    ds.push({label:'상한', data:upper, borderColor:'#c4b5fd', borderDash:[6,4], borderWidth:1.5,
+      pointRadius:0, fill: fillBand? '-1':false, backgroundColor:'rgba(196,181,253,0.18)', tension,
+      datalabels:{display:false}, order:99});
+  }
+
+  series.filter(s=>s.show).forEach(s=>{
+    ds.push({
+      label:s.name, data:s.vals.slice(), borderColor:s.color, backgroundColor:s.color,
+      borderWidth:lineW, tension,
+      pointStyle: markerToStyle(s.marker), pointRadius:markS, pointHoverRadius:markS+2,
+      fill:false, order:1,
+      datalabels:{
+        display: ctx=> s.label,
+        align:'top', anchor:'end', color:s.color, font:{size:labF, weight:'bold'},
+        formatter:(v)=> (v==null||isNaN(v))?'':Number(v).toFixed(1)
+      }
+    });
+  });
+
+  if(chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart'), {
+    type:'line',
+    data:{labels, datasets:ds},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      layout:{padding:{right:46, top:10}},
+      plugins:{
+        legend:{labels:{font:{size:legF}, filter:it=> it.text!=='상한' && it.text!=='하한', usePointStyle:true}},
+        datalabels:{clip:false},
+        tooltip:{enabled:true}
+      },
+      scales:{
+        x:{type:'linear', title:{display:true, text:'시험액 채취시간 (분)'},
+           min:0, max:Math.max(...times)*1.02, ticks:{stepSize:5}},
+        y:{title:{display:true, text:'용출률 (%)'}, min:0, max:ymax}
+      }
+    }
+  });
+}
+function savePNG(){
+  if(!chart){ alert('먼저 그래프를 그리세요.'); return; }
+  const a=document.createElement('a');
+  a.href=chart.toBase64Image('image/png',1); a.download='용출률_그래프.png'; a.click();
+}
+
+/* ============ f2 입력 테이블 ============ */
+let f2use = [];
+function renderF2Table(){
+  const t=document.getElementById('f2-table');
+  if(f2use.length!==times.length) f2use = times.map(tm=> tm!==0);
+  // 기존값 보존
+  const prev = window._f2data || {};
+  let h='<tr><th>시점</th><th>사용</th><th>대조약 R 평균</th><th>R CV(%)</th><th>시험약 T 평균</th><th>T CV(%)</th></tr>';
+  times.forEach((tm,j)=>{
+    const d = (prev[j]||{});
+    h+='<tr>';
+    h+='<td><b>'+tm+'분</b></td>';
+    h+='<td><input type="checkbox" '+(f2use[j]?'checked':'')+' onchange="f2use['+j+']=this.checked"></td>';
+    h+='<td><input type="number" id="rm'+j+'" value="'+(d.rm??'')+'" style="width:80px"></td>';
+    h+='<td><input type="number" id="rc'+j+'" value="'+(d.rc??'')+'" style="width:70px"></td>';
+    h+='<td><input type="number" id="tm'+j+'" value="'+(d.tm??'')+'" style="width:80px"></td>';
+    h+='<td><input type="number" id="tc'+j+'" value="'+(d.tc??'')+'" style="width:70px"></td>';
+    h+='</tr>';
+  });
+  t.innerHTML=h;
+}
+function readF2(){
+  const rows=[]; window._f2data={};
+  times.forEach((tm,j)=>{
+    const rm=parseFloat(document.getElementById('rm'+j).value);
+    const rc=parseFloat(document.getElementById('rc'+j).value);
+    const tm_=parseFloat(document.getElementById('tm'+j).value);
+    const tc=parseFloat(document.getElementById('tc'+j).value);
+    window._f2data[j]={rm,rc,tm:tm_,tc};
+    rows.push({t:tm, use:f2use[j], rm,rc,tm:tm_,tc});
+  });
+  return rows;
+}
+function pickAll(){ f2use=times.map(()=>true); renderF2Table(); }
+function pickExcl0(){ f2use=times.map(tm=> tm!==0); renderF2Table(); }
+function autoPickBy85(){
+  const rows=readF2(); let stop=false;
+  times.forEach((tm,j)=>{
+    const r=rows[j];
+    if(tm===0){ f2use[j]=false; return; }
+    if(stop){ f2use[j]=false; return; }
+    f2use[j]=true;
+    if(r.rm>=85 && r.tm>=85) stop=true; // 둘 다 85% 이상이면 이 시점까지만 포함
+  });
+  renderF2Table();
+  alert('85% 규칙: 두 제제가 모두 85% 이상이 되는 첫 시점까지만 사용하도록 선택했습니다.');
+}
+
+/* ============ f2 계산 + CV 체크 ============ */
+function f2formula(R,T){
+  const n=R.length; let s=0;
+  for(let i=0;i<n;i++) s+=Math.pow(R[i]-T[i],2);
+  return 50*Math.log10(Math.pow(1+s/n,-0.5)*100);
+}
+function calcF2(){
+  const rows=readF2().filter(r=>r.use);
+  if(rows.length<1){ document.getElementById('f2-result').innerHTML='<div class="notice warn">사용할 시점을 1개 이상 선택하세요.</div>'; return; }
+  const R=rows.map(r=>r.rm), T=rows.map(r=>r.tm);
+  if(R.some(isNaN)||T.some(isNaN)){ document.getElementById('f2-result').innerHTML='<div class="notice warn">선택한 시점의 R·T 평균값을 모두 입력하세요.</div>'; return; }
+  const n=rows.length;
+  const sum=rows.reduce((a,r)=>a+Math.pow(r.rm-r.tm,2),0);
+  const f2=f2formula(R,T);
+  const sim = f2>=50;
+
+  // CV 체크: 첫 사용시점 CV<=20, 이후 <=10 (R,T 모두)
+  const cvRows = rows.map((r,i)=>{
+    const lim = (i===0)?20:10;
+    const rok = !isNaN(r.rc) && r.rc<=lim;
+    const tok = !isNaN(r.tc) && r.tc<=lim;
+    return {t:r.t, lim, rc:r.rc, tc:r.tc, rok, tok, ok: rok&&tok};
+  });
+  const cvPass = cvRows.every(c=>c.ok);
+
+  let html='<div class="result-box">';
+  html+='<span class="f2-big" style="color:'+(sim?'var(--ok)':'var(--bad)')+'">f2 = '+f2.toFixed(1)+'</span> ';
+  html+='<span class="pill '+(sim?'ok':'bad')+'">'+(sim?'유사 (f2 ≥ 50)':'비유사 (f2 < 50)')+'</span>';
+  html+='<div class="hint" style="margin-top:8px">사용 시점 n = '+n+' ('+rows.map(r=>r.t+'분').join(', ')+') · Σ(R−T)² = '+sum.toFixed(2)+'</div>';
+
+  html+='<table style="margin-top:12px; max-width:560px"><tr><th>시점</th><th>CV 기준</th><th>R CV</th><th>T CV</th><th>판정</th></tr>';
+  cvRows.forEach(c=>{
+    html+='<tr><td>'+c.t+'분</td><td>≤ '+c.lim+'%</td>'
+      +'<td style="color:'+(c.rok?'var(--ok)':'var(--bad)')+'">'+(isNaN(c.rc)?'-':c.rc)+'</td>'
+      +'<td style="color:'+(c.tok?'var(--ok)':'var(--bad)')+'">'+(isNaN(c.tc)?'-':c.tc)+'</td>'
+      +'<td>'+(c.ok?'<span class="pill ok">OK</span>':'<span class="pill bad">초과</span>')+'</td></tr>';
+  });
+  html+='</table>';
+
+  if(cvPass){
+    html+='<div class="notice ok"><b>CV 조건 충족</b> — 기본 f2 계산법을 그대로 사용할 수 있습니다. (첫 시점 CV ≤ 20%, 이후 시점 CV ≤ 10%)</div>';
+  }else{
+    html+='<div class="notice warn"><b>CV 조건 초과</b> — 변동이 커서 기본 f2 판정의 신뢰도가 낮습니다. '
+       +'아래 <b>4. 부트스트랩 f2</b>를 사용해 90% 신뢰구간으로 판정하는 것을 권장합니다. '
+       +'<br><button class="btn sm" style="margin-top:8px" onclick="document.getElementById(\'boot-card\').scrollIntoView({behavior:\'smooth\'})">부트스트랩으로 이동 →</button></div>';
+  }
+  html+='</div>';
+  document.getElementById('f2-result').innerHTML=html;
+}
+
+/* ============ 부트스트랩 ============ */
+function randn(){ let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function parseIndiv(txt){
+  return txt.trim().split(/\n+/).filter(l=>l.trim()).map(l=> l.split(/[,\t]+/).map(x=>parseFloat(x.trim())));
+}
+function colMeans(mat){ // mat rows=unit, cols=time
+  const k=mat[0].length, out=[];
+  for(let j=0;j<k;j++){ let s=0; for(let i=0;i<mat.length;i++) s+=mat[i][j]; out.push(s/mat.length); }
+  return out;
+}
+function resample(mat){ const n=mat.length, out=[]; for(let i=0;i<n;i++) out.push(mat[Math.floor(Math.random()*n)]); return out; }
+function percentile(arr,p){ const a=arr.slice().sort((x,y)=>x-y); const idx=(a.length-1)*p; const lo=Math.floor(idx),hi=Math.ceil(idx);
+  if(lo===hi) return a[lo]; return a[lo]+(a[hi]-a[lo])*(idx-lo); }
+
+function runBootstrap(){
+  const rows=readF2().filter(r=>r.use);
+  if(rows.length<1){ document.getElementById('boot-result').innerHTML='<div class="notice warn">f2 표에서 사용할 시점을 선택하세요.</div>'; return; }
+  const B=+document.getElementById('bootN').value;
+  const n=+document.getElementById('nUnits').value;
+  let method=document.getElementById('bootMethod').value;
+
+  let Rindiv=parseIndiv(document.getElementById('rIndiv').value);
+  let Tindiv=parseIndiv(document.getElementById('tIndiv').value);
+  const hasIndiv = Rindiv.length>=3 && Tindiv.length>=3 && Rindiv[0].length===rows.length && Tindiv[0].length===rows.length;
+  if(method==='auto') method = hasIndiv? 'nonparam':'param';
+  if(method==='nonparam' && !hasIndiv){
+    document.getElementById('boot-result').innerHTML='<div class="notice warn">비모수 방법에는 개별값이 필요합니다. 행=vessel, 열=선택한 시점('+rows.length+'개) 순서로 입력하세요. (또는 모수 방법 선택)</div>';
+    return;
+  }
+
+  // 85% 분류 (시점별)
+  const cls = rows.map(r=>{
+    const rc=r.rm>=85, tc=r.tm>=85;
+    let s = (rc&&tc)?'둘 다 85% 이상' : (rc||tc)?'하나만 85% 이상' : '둘 다 85% 미만';
+    return {t:r.t, rm:r.rm, tm:r.tm, s};
+  });
+
+  // 점추정
+  const pointF2 = f2formula(rows.map(r=>r.rm), rows.map(r=>r.tm));
+
+  // 부트스트랩
+  const f2s=[];
+  if(method==='nonparam'){
+    for(let b=0;b<B;b++){
+      const Rm=colMeans(resample(Rindiv)), Tm=colMeans(resample(Tindiv));
+      f2s.push(f2formula(Rm,Tm));
+    }
+  }else{
+    // 모수: 각 시점 N(mean, sd), sd=mean*CV/100
+    const Rsd=rows.map(r=> (isNaN(r.rc)?0:r.rm*r.rc/100));
+    const Tsd=rows.map(r=> (isNaN(r.tc)?0:r.tm*r.tc/100));
+    for(let b=0;b<B;b++){
+      const Rm=rows.map((r,j)=>{ let s=0; for(let i=0;i<n;i++) s+=r.rm+randn()*Rsd[j]; return s/n; });
+      const Tm=rows.map((r,j)=>{ let s=0; for(let i=0;i<n;i++) s+=r.tm+randn()*Tsd[j]; return s/n; });
+      f2s.push(f2formula(Rm,Tm));
+    }
+  }
+  const lo=percentile(f2s,0.05), hi=percentile(f2s,0.95), med=percentile(f2s,0.5);
+  const mean=f2s.reduce((a,x)=>a+x,0)/f2s.length;
+  const sim = lo>=50;
+
+  let html='<div class="result-box">';
+  html+='<div class="row" style="justify-content:space-between">';
+  html+='<span class="f2-big" style="color:'+(sim?'var(--ok)':'var(--bad)')+'">90% CI = ['+lo.toFixed(1)+', '+hi.toFixed(1)+']</span>';
+  html+='<span class="pill '+(sim?'ok':'bad')+'">'+(sim?'유사 (하한 ≥ 50)':'비유사 (하한 < 50)')+'</span></div>';
+  html+='<div class="hint" style="margin-top:8px">방법: '+(method==='nonparam'?'비모수(개별값 재표본)':'모수(mean±SD 정규분포 생성)')
+     +' · 반복 '+B.toLocaleString()+'회 · n='+n+' · 점추정 f2='+pointF2.toFixed(1)
+     +' · 부트스트랩 평균 f2='+mean.toFixed(1)+' · 중앙값 '+med.toFixed(1)+'</div>';
+
+  html+='<table style="margin-top:12px; max-width:560px"><tr><th>시점</th><th>R 평균</th><th>T 평균</th><th>85% 구간 분류</th></tr>';
+  cls.forEach(c=> html+='<tr><td>'+c.t+'분</td><td>'+c.rm.toFixed(1)+'</td><td>'+c.tm.toFixed(1)+'</td><td>'+c.s+'</td></tr>');
+  html+='</table>';
+  html+='<div class="hint" style="margin-top:8px">판정 기준: 부트스트랩 f2 분포의 90% 신뢰구간(5~95 백분위) 하한이 50 이상이면 두 제제는 유사합니다.</div>';
+  html+='</div>';
+  document.getElementById('boot-result').innerHTML=html;
+}
+
+/* ============ 엑셀 파싱 ============ */
+let WB=null;
+document.getElementById('xlsx-file').addEventListener('change', function(e){
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      WB=XLSX.read(ev.target.result,{type:'array'});
+      const sel=document.getElementById('sheet-sel');
+      sel.innerHTML=WB.SheetNames.map(n=>'<option>'+n+'</option>').join('');
+      // 기시용출액 류 시트 자동 선택
+      const def=WB.SheetNames.find(n=>/용출액|용출율|용출률/.test(n)) || WB.SheetNames[0];
+      sel.value=def; sel.style.display='inline-block';
+      document.getElementById('xlsx-apply').style.display='inline-block';
+      document.getElementById('xlsx-msg').textContent='시트를 선택하고 "이 시트 적용"을 누르세요. (자동 감지: '+def+')';
+    }catch(err){ document.getElementById('xlsx-msg').textContent='엑셀 읽기 실패: '+err.message; }
+  };
+  r.readAsArrayBuffer(file);
+});
+
+function applySheet(){
+  const name=document.getElementById('sheet-sel').value;
+  const ws=WB.Sheets[name];
+  const A=XLSX.utils.sheet_to_json(ws,{header:1, raw:true});
+  // '용출시간' 요약 앵커 찾기
+  let anchor=-1;
+  for(let i=0;i<A.length;i++){ if((A[i]||[]).some(c=> typeof c==='string' && c.trim()==='용출시간')){ anchor=i; break; } }
+  if(anchor<0){ document.getElementById('xlsx-msg').textContent='이 시트에서 요약표(용출시간 행)를 찾지 못했습니다. 아래 칸에 직접 입력하세요.'; return; }
+
+  const arow=A[anchor];
+  const colIdx=[], tvals=[];
+  for(let c=2;c<arow.length;c++){ if(typeof arow[c]==='number'){ colIdx.push(c); tvals.push(arow[c]); } }
+  // mean/CV 행 수집
+  function grab(startLabel){
+    let gi=-1;
+    for(let i=anchor+1;i<Math.min(anchor+30,A.length);i++){
+      if((A[i]||[]).some(c=> typeof c==='string' && c.trim()===startLabel)){ gi=i; break; }
+    }
+    if(gi<0) return null;
+    const out={mean:[],cv:[]};
+    for(let i=gi;i<Math.min(gi+8,A.length);i++){
+      const row=A[i]||[]; const lab=row.find(c=> c==='mean'||c==='CV'||c==='SD'||c==='Max'||c==='Min');
+      if(row.some(c=>c==='mean')) out.mean=colIdx.map(c=>row[c]);
+      if(row.some(c=>c==='CV'))   out.cv  =colIdx.map(c=>row[c]);
+    }
+    return out;
+  }
+  const T=grab('시험약'), R=grab('대조약');
+  if(!T||!R){ document.getElementById('xlsx-msg').textContent='시험약/대조약 요약행을 찾지 못했습니다. 직접 입력하세요.'; return; }
+
+  // 시간축 반영 (0분 포함: 앞에 0 추가)
+  const newTimes=[0, ...tvals];
+  document.getElementById('times-input').value=newTimes.join(', ');
+  // 시리즈: 시험약, 대조약(기준)
+  series=[
+    {name:'시험약(T)', color:'#dc2626', marker:'rect', show:true, label:true, ref:false, vals:[0, ...T.mean.map(v=>+(+v).toFixed(1))]},
+    {name:'대조약(R)', color:'#059669', marker:'triangle', show:true, label:true, ref:true, vals:[0, ...R.mean.map(v=>+(+v).toFixed(1))]},
+  ];
+  times=newTimes; renderSeriesTable();
+  // f2 표 채우기
+  window._f2data={}; f2use=times.map(tm=> tm!==0);
+  renderF2Table();
+  tvals.forEach((tm,k)=>{
+    const j=newTimes.indexOf(tm);
+    document.getElementById('rm'+j).value=(+R.mean[k]).toFixed(1);
+    document.getElementById('rc'+j).value=(+R.cv[k]).toFixed(1);
+    document.getElementById('tm'+j).value=(+T.mean[k]).toFixed(1);
+    document.getElementById('tc'+j).value=(+T.cv[k]).toFixed(1);
+  });
+
+  // 개별 12 vessel (보정 용출률 최종블록) 시도: 'mean±SD' 바로 위 12행
+  tryGrabIndiv(A, colIdx);
+
+  drawChart();
+  document.getElementById('xlsx-msg').textContent='엑셀 적용 완료 — 시점 '+tvals.join(', ')+'분, 시험약/대조약 평균·CV를 불러왔습니다. (필요시 값 수정 후 재계산)';
+}
+
+function tryGrabIndiv(A, colIdx){
+  // '시험약' 라벨 아래로 숫자 12행이 연속하고 다음이 mean±SD 인 블록을 마지막으로 채택
+  function blocks(label){
+    const res=[];
+    for(let i=0;i<A.length;i++){
+      const row=A[i]||[];
+      if(row.some(c=> typeof c==='string' && c.trim()===label)){
+        // 이 행부터 아래로 숫자행 모으기
+        const mat=[];
+        for(let k=i;k<Math.min(i+14,A.length);k++){
+          const r=A[k]||[]; const vals=colIdx.map(c=>r[c]);
+          if(vals.every(v=> typeof v==='number')) mat.push(vals);
+          if(r.some(c=> typeof c==='string' && /mean±SD/.test(c))) break;
+        }
+        if(mat.length>=6) res.push(mat);
+      }
+    }
+    return res;
+  }
+  try{
+    const tb=blocks('시험약'), rb=blocks('대조약');
+    if(tb.length && rb.length){
+      const T=tb[tb.length-1], R=rb[rb.length-1];
+      document.getElementById('tIndiv').value=T.map(r=>r.map(x=>(+x).toFixed(1)).join(', ')).join('\n');
+      document.getElementById('rIndiv').value=R.map(r=>r.map(x=>(+x).toFixed(1)).join(', ')).join('\n');
+    }
+  }catch(e){}
+}
+</script>
+</body>
+</html>
